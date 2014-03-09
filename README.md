@@ -24,6 +24,7 @@ Wants
 - Using probabilities, ignore differences in probabilities that are not stat significant across all definitions (~5%)
 - Do naive bayes
 
+----------------------------------------------------------------------------------------------------------------------
 
 WSD Dictionary
 
@@ -33,13 +34,17 @@ Wants
 - Use tag to identify which definition to use (if the tag is noun, then use the noun definitions)
 - Then look-up word
 - Look up phrases large to small, removing matches in the context definitions
-- Scoring will be done using this formula: (length of phrase)(scale factor)(frequency)
+- Scoring will be done using this formula: (length of phrase)x(scale factor)x(frequency)
 - May or may not use the example sentence along with the definitions.
 
+----------------------------------------------------------------------------------------------------------------------
 
 Questions
 
 ? Window size: Bayes, dict, or both?
+
 ? Stem vs. Lemmatize?
+
 ? Parsing WordNET dictionary, how?
+
 ? SenseVal?
