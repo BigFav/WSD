@@ -8,9 +8,9 @@ from nltk.stem.wordnet import WordNetLemmatizer as Lemma
 tokens = []
 lmtzr = Lemma()
 window_size = 2
-# Turns "%% word %%" into "__word__" to hack the tokenizer into not splitting it up
+# Turns "%% word %%" into "____word____" to hack the tokenizer into not splitting it up
 with open('training_data.data', 'r') as train:
-    txt = re.sub(r"%%\s(.+)\s%%", r"__\1__", train.read())
+    txt = re.sub(r"%%\s(.+)\s%%", r"____\1____", train.read())
 tokens = nltk.word_tokenize(txt)
 
 # Make the list a set for constant access in the lst comp
@@ -24,20 +24,20 @@ word_def = ''
 lemma_word = ''
 lemma_def = ''
 
-prev_token = tokens[0]
-for token in tokens[1:]:
-    # token is either keyword, or def number
+for i,token in enumerate(tokens):
+    # if token is a pipe, we know we split the word.tag and the def num
     if token is '|':
-        if '.' in prev_token:
-            word = prev_token[:-2]
+        if '.' in tokens[i-1]:
+            prev_token = tokens.pop(i-1)
+            def_num = tokens.pop(i)
             tag = prev_token[-1]
+            word = prev_token[:-2]
             lemma_word = "%s.%s" % (lmtzr.lemmatize(word, tag), tag)
-        else:
-            word_def = wn.synset("%s.%s.%s" % (word, tag, prev_token)).definition
-            lemma_def = wn.synset("%s.%s" % (lemma_word, prev_token)).definition
+            word_def = wn.synset("%s.%s.%s" % (word, tag, def_num)).definition
+            lemma_def = wn.synset("%s.%s" % (lemma_word, def_num)).definition
+            del tokens[i] # Remove sencond pipe aka '|'
 
     # token is keyword in sentence
-    if '__' in token:
-
-    prev_token = token
+    if '____' in token:
+        pass
 
