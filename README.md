@@ -6,6 +6,9 @@ http://folk.uio.no/larsereb/informatikk/inf5820/NBWSD.pdf
 
 http://nlp.stanford.edu/software/corenlp.shtml
 
+http://nltk.googlecode.com/svn/trunk/doc/howto/wordnet.html
+
+
 
 ---------------------------------------------------------------------------------------------
 
