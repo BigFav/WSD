@@ -8,19 +8,14 @@ from nltk.stem.wordnet import WordNetLemmatizer as Lemma
 tokens = []
 lmtzr = Lemma()
 window_size = 2
-# Turns "%%word%%" into "word%"
+# Turns "%% word %%" into "__word__" to hack the tokenizer into not splitting it up
 with open('training_data.data', 'r') as train:
-    txt = re.sub(r"%%(.+)%%", r"\1%", train.read())
+    txt = re.sub(r"%%\s(.+)\s%%", r"__\1__", train.read())
 tokens = nltk.word_tokenize(txt)
 
 # Make the list a set for constant access in the lst comp
 stopwords = set(stop.words('english'))
 tokens = [w for w in tokens if not w.lower() in stopwords]
-
-
-for i in range(len(tokens)):
-    if tokens[i] is '%':
-        print tokens[i-1:i+2]
 
 # remove punctuation?
 tag = ''
@@ -41,7 +36,8 @@ for token in tokens[1:]:
             word_def = wn.synset("%s.%s.%s" % (word, tag, prev_token)).definition
             lemma_def = wn.synset("%s.%s" % (lemma_word, prev_token)).definition
 
-
+    # token is keyword in sentence
+    if '__' in token:
 
     prev_token = token
 
