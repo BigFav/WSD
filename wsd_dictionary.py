@@ -39,5 +39,8 @@ for i,token in enumerate(tokens):
 
     # token is keyword in sentence
     if '____' in token:
-        pass
-
+        context = []
+        for j in range(window_size+1)[1:]:
+            context.append(tokens[i+j])
+            context.append(tokens[i-j])
+        # TODO Method that compares defs
