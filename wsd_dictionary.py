@@ -16,10 +16,10 @@ use_sentences = False
 
 
 def str_format(txt):
-    """Removes punctuation, and makes lowercase."""
+    """Removes punctuation, makes lowercase, and lemmatizes."""
     txt = re.sub("''", " ", txt)
-    return re.sub('([\.\?\!\:\|,;`"\(\)]+)', ' ', txt).lower()
-
+    txt = re.sub('([\.\?\!\:\|,;`"\(\)]+)', ' ', txt).lower().split()
+    return ' '.join(map(lmtzr.lemmatize, txt))
 
 def get_definitions(prev_token, def_num, tag):
     word = prev_token[:-2]
@@ -30,11 +30,11 @@ def get_definitions(prev_token, def_num, tag):
         # first loop through, and only use matching tag
         for syn in wn.synsets(word):
             if syn.name.split('.')[1] == tag:
-                word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(syn.definition).split())))
+                word_defs.append(str_format(syn.definition))
         # if empty, collect all defs
         if not word_defs:
             for syn in wn.synsets(word):
-                word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(syn.definition).split())))
+                word_defs.append(str_format(syn.definition))
     else:
         # if we know what sense it is
         if def_num:
@@ -48,7 +48,7 @@ def get_definitions(prev_token, def_num, tag):
        # if there is at least one wordnet definition
         if len(wordnet_nums):
             for wordnet_num in wordnet_nums:
-                word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(wn.synset("%s.%s.%s" % (word, tag, wordnet_num)).definition).split())))
+                word_defs.append(str_format(wn.synset("%s.%s.%s" % (word, tag, wordnet_num)).definition))
         else:
             if def_num:
                 word_defs = dictionary[prev_token][def_num][1]
@@ -59,24 +59,22 @@ def get_definitions(prev_token, def_num, tag):
                 word_defs = []
                 if use_sentences:
                     for sense in dictionary[prev_token].iterkeys():
-                        word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(dictionary[prev_token][sense][1]).split())))
-                        word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(dictionary[prev_token][sense][2]).split())))
+                        word_defs.append(dictionary[prev_token][sense][1])
+                        word_defs.append(dictionary[prev_token][sense][2])
                 else:
                     for sense in dictionary[prev_token].iterkeys():
-                        word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(dictionary[prev_token][sense][1]).split())))
+                        word_defs.append(dictionary[prev_token][sense][1])
                     print word_defs
 
+    # Can be optimized and/or removed
     if rem_stop:
         #for i,word_def in enumerate(word_defs):
         #    word_def = word_def.split()
         #    word_defs[i] = ' '.join([w for w in word_def if w not in stopwords])
         word_defs = [(' '.join([w for w in word_def.split() if w not in stopwords])) for word_def in word_defs]
-        if word == "system":
-            print word_defs
 
     return (word, word_defs)
 
-# TODO rest of method
 def get_context_defs(word, tag):
     if tag:
         return get_definitions(word, 0, tag)[1]
@@ -96,8 +94,8 @@ for level in doc.findall('lexelt'):
     dictionary[word] = OrderedDict()
     for sense in level.findall('sense'):
         dictionary[word][sense.get('id')] = (sense.get('wordnet').split(','), \
-                                             sense.get('gloss'), \
-                                             sense.get('examples').lower())
+                                             str_format(sense.get('gloss')), \
+                                             str_format(sense.get('examples')))
 
 # Turns "%% word %%" into "____word____" to hack the tokenizer into not splitting it up
 with open('training_data.data', 'r') as train:
@@ -151,7 +149,7 @@ for i,token in enumerate(tokens):
             if not end_para:
                 context.append(lmtzr.lemmatize(tokens[i+j]))
         # Get definitions for context words with weak POS-tag
-        for word in context:
+        for i,word in enumerate(context):
             tag = nltk.pos_tag(word)[0][1].lower()
             if 'n' in tag:
                 tag = 'n'
@@ -165,6 +163,7 @@ for i,token in enumerate(tokens):
                 tag = ''
             if tag:
                 word += ".%s" % (tag)
+            context[i] = word
             if not word in context_defs.iterkeys():
                 defs = get_context_defs(word, tag)
                 context_defs[word] = defs
