@@ -5,11 +5,9 @@ from nltk.corpus import stopwords as stop
 from nltk.stem.wordnet import WordNetLemmatizer as Lemma
 
 from xml.etree import ElementTree as ET
+from collections import OrderedDict
 
 
-WORDNET_NUM = 0
-GLOSS = 1
-EXAMPLES = 2
 dictionary = {}
 lmtzr = Lemma()
 window_size = 2
@@ -18,55 +16,84 @@ use_sentences = False
 
 
 def str_format(txt):
-    """
-    Removes punctuation, and makes lowercase.
-    """
-    txt = re.sub("('')|(\.\.\.)", " ", txt)
-    txt = re.sub("\. ", " ", txt)
-    return re.sub('([\?\!\:,;`"\(\)]+)', ' ', txt).lower()
+    """Removes punctuation, and makes lowercase."""
+    txt = re.sub("''", " ", txt)
+    return re.sub('([\.\?\!\:\|,;`"\(\)]+)', ' ', txt).lower()
 
-# TODO handle def_num == 0
+
 def get_definitions(prev_token, def_num, tag):
     word = prev_token[:-2]
     word_defs = []
-    wordnet_nums = dictionary[prev_token][def_num][0]
-    if wordnet_nums[0]:
-        # Since the given dictionary is extra trash
-        for wordnet_num in wordnet_nums:
-            try:
-                word_defs.append(str_format(wn.synset("%s.%s.%s" % (word, tag, wordnet_num)).definition))
-            except nltk.corpus.reader.wordnet.WordNetError:
-                if len(wordnet_nums) > 1:
-                    break
-                else:
-                    word_defs = dictionary[prev_token][def_num][1]
-                    if use_sentences:
-                        word_defs += ' ' + dictionary[prev_token][def_num][2]
-                    word_defs = [str_format(word_defs)]
-                    break
+
+    # if the word isn't in the dictionary xml file
+    if not prev_token in dictionary.iterkeys():
+        # first loop through, and only use matching tag
+        for syn in wn.synsets(word):
+            if syn.name.split('.')[1] == tag:
+                word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(syn.definition).split())))
+        # if empty, collect all defs
+        if not word_defs:
+            for syn in wn.synsets(word):
+                word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(syn.definition).split())))
     else:
-        word_defs = dictionary[prev_token][def_num][1]
-        if use_sentences:
-            word_defs += ' ' + dictionary[prev_token][def_num][2]
-        word_defs = [str_format(word_defs)]
+        # if we know what sense it is
+        if def_num:
+            wordnet_nums = filter(bool, dictionary[prev_token][def_num][0])
+        else:
+            wordnet_nums = []
+            for sense in dictionary[prev_token].iterkeys():
+                wordnet_nums.extend(dictionary[prev_token][sense][0])
+            wordnet_nums = sorted(filter(bool, wordnet_nums))
+       
+       # if there is at least one wordnet definition
+        if len(wordnet_nums):
+            for wordnet_num in wordnet_nums:
+                word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(wn.synset("%s.%s.%s" % (word, tag, wordnet_num)).definition).split())))
+        else:
+            if def_num:
+                word_defs = dictionary[prev_token][def_num][1]
+                if use_sentences:
+                    word_defs += ' ' + dictionary[prev_token][def_num][2]
+                word_defs = [str_format(word_defs)]
+            else:
+                word_defs = []
+                if use_sentences:
+                    for sense in dictionary[prev_token].iterkeys():
+                        word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(dictionary[prev_token][sense][1]).split())))
+                        word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(dictionary[prev_token][sense][2]).split())))
+                else:
+                    for sense in dictionary[prev_token].iterkeys():
+                        word_defs.append(' '.join(map(lmtzr.lemmatize,str_format(dictionary[prev_token][sense][1]).split())))
+                    print word_defs
+
     if rem_stop:
         #for i,word_def in enumerate(word_defs):
         #    word_def = word_def.split()
         #    word_defs[i] = ' '.join([w for w in word_def if w not in stopwords])
         word_defs = [(' '.join([w for w in word_def.split() if w not in stopwords])) for word_def in word_defs]
+        if word == "system":
+            print word_defs
+
     return (word, word_defs)
 
 # TODO rest of method
 def get_context_defs(word, tag):
     if tag:
-        return get_definitions(word, 0, tag)
-
+        return get_definitions(word, 0, tag)[1]
+    
+    defs = []
+    for tag in ['a', 'n', 'r', 'v']:
+        lst = get_definitions(word, 0, tag)[1]
+        if lst:
+            defs.extend(lst)
+    # not sure if context definition order matters...but removes duplicates
+    return list(set(defs))
 
 # Initialize dictionary xml file as nested hashmap
 doc = ET.parse('dictionary.xml').getroot()
 for level in doc.findall('lexelt'):
     word = level.get('item')
-    dictionary[word] = {}
+    dictionary[word] = OrderedDict()
     for sense in level.findall('sense'):
         dictionary[word][sense.get('id')] = (sense.get('wordnet').split(','), \
                                              sense.get('gloss'), \
@@ -79,7 +106,7 @@ with open('training_data.data', 'r') as train:
 #tries to remove punctuation
 txt = re.sub("('')|(\.\.\.)", " ", txt)
 txt = re.sub("\. ", " ", txt)
-tokens = nltk.word_tokenize(re.sub('([\?\!\:,;`"\(\)]+)', ' ', txt))
+tokens = nltk.word_tokenize(re.sub('([\?\!\:,;`"\(\)]+)', ' ', txt).lower())
 
 # Make the list a set for constant access in the lst comp
 if rem_stop:
@@ -89,6 +116,7 @@ if rem_stop:
 tag = ''
 target = ''
 target_defs = {} # To cache calculated definitions
+context_defs = {}
 lemma_word = ''
 lemma_defs = []
 for i,token in enumerate(tokens):
@@ -112,19 +140,19 @@ for i,token in enumerate(tokens):
         context = []
         beg_para = False
         end_para = False
+        # Don't overun into another paragrph
         for j in range(window_size+1)[1:]:
             if tokens[i-j] == '|':
                 beg_para = True 
             if not beg_para:
-                context.append(tokens[i-j])
+                context.append(lmtzr.lemmatize(tokens[i-j]))
             if tokens[i+j] in target_defs.iterkeys():
                 end_para = True
             if not end_para:
-                context.append(tokens[i+j])
-        # TODO Get definitions for context words with weak POS-tag
-        context_defs = {word:{} for word in context}
+                context.append(lmtzr.lemmatize(tokens[i+j]))
+        # Get definitions for context words with weak POS-tag
         for word in context:
-            tag = nltk.pos_tag(word).lower()
+            tag = nltk.pos_tag(word)[0][1].lower()
             if 'n' in tag:
                 tag = 'n'
             elif 'v' in tag:
@@ -135,8 +163,9 @@ for i,token in enumerate(tokens):
                 tag = 'r'
             else:
                 tag = ''
-            word += ".%s" % (tag)
-            (None, defs) = get_context_definitions(word, tag)
-            context_defs[word] = defs
+            if tag:
+                word += ".%s" % (tag)
+            if not word in context_defs.iterkeys():
+                defs = get_context_defs(word, tag)
+                context_defs[word] = defs
         # TODO Method that compares defs
-
