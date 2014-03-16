@@ -226,3 +226,5 @@ for i,token in enumerate(tokens):
                     context2.append(ret)
                 j += 1
             context.extend(context2)
+            for word in context:
+                # TODO compare definitions
