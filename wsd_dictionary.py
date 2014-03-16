@@ -17,14 +17,14 @@ use_sentences = False
 lmtz_context = True
 
 
-#TODO Discount definition-less words, fix POS tag, and regex / and ancronyms
-
+#TODO regex '/' and ancronyms
 
 
 def str_format(txt):
     """Removes punctuation, makes lowercase, and lemmatizes."""
     txt = re.sub("''", " ", txt)
-    txt = re.sub('([\.\?\!\:\|,;`"\(\)]+)', ' ', txt).lower().split()
+    txt = re.sub("--", " ", txt)
+    txt = re.sub('([\.\?\!\:\|,;`"\(\){}]+)', ' ', txt).lower().split()
     return ' '.join(map(lmtzr.lemmatize, txt))
 
 def get_definitions(prev_token, def_num, tag):
@@ -106,6 +106,26 @@ def get_context_defs(word, tag):
     # not sure if context definition order matters...but removes duplicates
     return list(set(defs))
 
+def parse_context(word, tag):
+    if 'N' in tag or 'P' in tag:
+        tag = 'n'
+    elif 'V' in tag:
+        tag = 'v'
+    elif 'ADJ' in tag or 'J' in tag:
+        tag = 'a'
+    elif 'ADV' in tag or 'RB' in tag:
+        tag = 'r'
+    else:
+        tag = ''
+    if tag:
+        word += ".%s" % (tag)
+    defs = get_context_defs(word, tag)
+    if defs:
+        context_defs[word] = defs
+        return word
+    return False
+
+
 # Initialize dictionary xml file as nested hashmap
 doc = ET.parse('dictionary.xml').getroot()
 for level in doc.findall('lexelt'):
@@ -117,13 +137,14 @@ for level in doc.findall('lexelt'):
                                              str_format(sense.get('examples')))
 
 # Turns "%% word %%" into "____word____" to hack the tokenizer into not splitting it up
-with open('training_data.data', 'r') as train:
+with open('validation_data.data', 'r') as train:
     txt = re.sub(r"%%\s(.+)\s%%", r"____\1____", train.read())
 
 #tries to remove punctuation
 txt = re.sub("('')|(\.\.\.)", " ", txt)
 txt = re.sub("\. ", " ", txt)
-tokens = nltk.word_tokenize(re.sub('([\?\!\:,;`"\(\)]+)', ' ', txt).lower())
+txt = re.sub("--", " ", txt)
+tokens = nltk.word_tokenize(re.sub('([\?\!\:,;`"\(\){}]+)', ' ', txt).lower())
 
 # Make the list a set for constant access in the lst comp
 if rem_stop:
@@ -160,46 +181,48 @@ for i,token in enumerate(tokens):
                     for sense,word in word_defs:
                         target_defs[target][sense].append(word_def)
             
-            # since I messed up the indices, it auto-skips the 2nd '|'
-    # token is keyword in sentence
-    if '____' in token:
-        context = []
-        beg_para = False
-        end_para = False
-        # Don't overun into another paragrph
-        for j in range(window_size+1)[1:]:
-            if tokens[i-j] == '|':
-                beg_para = True 
-            if not beg_para:
+            # get the paragraph, and index of target word
+            index = 0
+            paragraph = []
+            for j,token in enumerate(tokens[i+1:]):
+                if token == '|':
+                    break
+                if '____' in token:
+                    index = j+1
+                paragraph.append(tokens.pop(i))
+            paragraph = nltk.pos_tag(paragraph)
+            
+            # loop backwards to get the window size number of words with defs
+            j = 1
+            context = []
+            while (len(context) < window_size) and (index-j >= 0):
+                # Don't overun into another paragraph
+                if paragraph[index-j][0] == '|':
+                    break
                 if lmtz_context is True:
-                    context.append(lmtzr.lemmatize(tokens[i-j]))
+                    word = lmtzr.lemmatize(paragraph[index-j][0])
                 else:
-                    context.append(tokens[i-j])
-            if tokens[i+j] in target_defs.iterkeys():
-                end_para = True
-            if not end_para:
+                    word = paragraph[index-j][0]
+                tag = paragraph[index-j][1]
+                ret = parse_context(word, tag)
+                if not ret is False:
+                    context.append(ret)
+                j += 1
+            
+            # same for forwards
+            j = 1
+            context2 = []
+            while (len(context2) < window_size) and (index+j < len(paragraph)):
+                # Don't overun into another paragraph
+                if paragraph[index+j] in target_defs.iterkeys():
+                    break
                 if lmtz_context is True:
-                    context.append(lmtzr.lemmatize(tokens[i+j]))
+                    word = lmtzr.lemmatize(paragraph[index+j][0])
                 else:
-                    context.append(tokens[i+j]) 
-        
-        # Get definitions for context words with weak POS-tag
-        for i,word in enumerate(context):
-            tag = nltk.pos_tag(word)[0][1].lower()
-            if 'n' in tag:
-                tag = 'n'
-            elif 'v' in tag:
-                tag = 'v'
-            elif 'adj' in tag:
-                tag = 'a'
-            elif 'adv' in tag:
-                tag = 'r'
-            else:
-                tag = ''
-            if tag:
-                word += ".%s" % (tag)
-            context[i] = word
-            if not word in context_defs.iterkeys():
-                defs = get_context_defs(word, tag)
-                context_defs[word] = defs
-        # TODO Method that compares defs
+                    word = paragraph[index+j][0]
+                tag = paragraph[index+j][1]
+                ret = parse_context(word, tag)
+                if not ret is False:
+                    context2.append(ret)
+                j += 1
+            context.extend(context2)
