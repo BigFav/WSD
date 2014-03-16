@@ -137,7 +137,7 @@ for level in doc.findall('lexelt'):
                                              str_format(sense.get('examples')))
 
 # Turns "%% word %%" into "____word____" to hack the tokenizer into not splitting it up
-with open('validation_data.data', 'r') as train:
+with open('fake_data.data', 'r') as train:
     txt = re.sub(r"%%\s(.+)\s%%", r"____\1____", train.read())
 
 #tries to remove punctuation
@@ -169,17 +169,16 @@ for i,token in enumerate(tokens):
                 target_defs[target] = defaultdict(list)
                 word_defs = get_definitions(target, def_num, tag)
                 if def_num:
-                    target_defs[target][def_num] = word_defs
+                    target_defs[target][def_num] = ' '.join(word_defs)
                 else:
                     for sense,word_def in word_defs:
                         target_defs[target][sense].append(word_def)
+                    for sense in target_defs[target].iterkeys():
+                        target_defs[target][sense] = ' '.join(target_defs[target][sense])
             elif not def_num in target_defs[target].iterkeys():
-                word_defs = get_definitions(target, def_num, tag)
                 if def_num:
-                    target_defs[target][def_num] = word_defs
-                else: 
-                    for sense,word in word_defs:
-                        target_defs[target][sense].append(word_def)
+                    word_defs = get_definitions(target, def_num, tag)
+                    target_defs[target][def_num] = ' '.join(word_defs)
             
             # get the paragraph, and index of target word
             index = 0
@@ -226,5 +225,8 @@ for i,token in enumerate(tokens):
                     context2.append(ret)
                 j += 1
             context.extend(context2)
-            for word in context:
+            #for word in context:
                 # TODO compare definitions
+
+print target_defs['affect.v']
+#print context_defs
