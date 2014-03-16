@@ -5,7 +5,8 @@ from nltk.corpus import stopwords as stop
 from nltk.stem.wordnet import WordNetLemmatizer as Lemma
 
 from xml.etree import ElementTree as ET
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+from operator import itemgetter
 
 
 dictionary = {}
@@ -13,6 +14,7 @@ lmtzr = Lemma()
 window_size = 2
 rem_stop = True
 use_sentences = False
+lmtz_context = True
 
 
 def str_format(txt):
@@ -30,60 +32,64 @@ def get_definitions(prev_token, def_num, tag):
         # first loop through, and only use matching tag
         for syn in wn.synsets(word):
             if syn.name.split('.')[1] == tag:
-                word_defs.append(str_format(syn.definition))
+                word_defs.append((0,str_format(syn.definition)))
         # if empty, collect all defs
         if not word_defs:
             for syn in wn.synsets(word):
-                word_defs.append(str_format(syn.definition))
+                word_defs.append((0,str_format(syn.definition)))
     else:
         # if we know what sense it is
         if def_num:
-            wordnet_nums = filter(bool, dictionary[prev_token][def_num][0])
+            wordnet_nums = [(def_num,filter(bool, dictionary[prev_token][def_num][0]))]
         else:
             wordnet_nums = []
-            for sense in dictionary[prev_token].iterkeys():
-                wordnet_nums.extend(dictionary[prev_token][sense][0])
-            wordnet_nums = sorted(filter(bool, wordnet_nums))
-       
-       # if there is at least one wordnet definition
+            for i,sense in enumerate(dictionary[prev_token].iterkeys()):
+                wordnet_nums.append((i,dictionary[prev_token][sense][0]))
+            wordnet_nums = sorted([(i,define) for (i,define) in wordnet_nums if define[0]], \
+                           key=itemgetter(0))
+
+        # if there is at least one wordnet definition
         if len(wordnet_nums):
-            for wordnet_num in wordnet_nums:
-                word_defs.append(str_format(wn.synset("%s.%s.%s" % (word, tag, wordnet_num)).definition))
+            for (sense,wordnet_lst) in wordnet_nums:
+                for wordnet_num in wordnet_lst:
+                    defin = wn.synset("%s.%s.%s" % (word, tag, wordnet_num)).\
+                            definition
+                    word_defs.append((sense, str_format(defin)))
         else:
             if def_num:
                 word_defs = dictionary[prev_token][def_num][1]
                 if use_sentences:
                     word_defs += ' ' + dictionary[prev_token][def_num][2]
-                word_defs = [str_format(word_defs)]
+                word_defs = [(def_num,str_format(word_defs))]
             else:
                 word_defs = []
                 if use_sentences:
                     for sense in dictionary[prev_token].iterkeys():
-                        word_defs.append(dictionary[prev_token][sense][1])
-                        word_defs.append(dictionary[prev_token][sense][2])
+                        word_defs.append((sense,dictionary[prev_token][sense][1]))
+                        word_defs.append((sense,dictionary[prev_token][sense][2]))
                 else:
                     for sense in dictionary[prev_token].iterkeys():
-                        word_defs.append(dictionary[prev_token][sense][1])
-                    print word_defs
-
-    # Can be optimized and/or removed
+                        word_defs.append((sense,dictionary[prev_token][sense][1]))
+            
+    """ Can be optimized and/or removed
     if rem_stop:
         #for i,word_def in enumerate(word_defs):
         #    word_def = word_def.split()
         #    word_defs[i] = ' '.join([w for w in word_def if w not in stopwords])
         word_defs = [(' '.join([w for w in word_def.split() if w not in stopwords])) for word_def in word_defs]
-
-    return (word, word_defs)
+    """
+    return word_defs
 
 def get_context_defs(word, tag):
     if tag:
-        return get_definitions(word, 0, tag)[1]
+        lst = get_definitions(word, 0, tag)
+        return [defin for sense,defin in lst]
     
     defs = []
     for tag in ['a', 'n', 'r', 'v']:
-        lst = get_definitions(word, 0, tag)[1]
+        lst = get_definitions(word, 0, tag)
         if lst:
-            defs.extend(lst)
+            defs.extend([defin for sense,defin in lst])
     # not sure if context definition order matters...but removes duplicates
     return list(set(defs))
 
@@ -93,7 +99,7 @@ for level in doc.findall('lexelt'):
     word = level.get('item')
     dictionary[word] = OrderedDict()
     for sense in level.findall('sense'):
-        dictionary[word][sense.get('id')] = (sense.get('wordnet').split(','), \
+        dictionary[word][int(sense.get('id'))] = (sense.get('wordnet').split(','), \
                                              str_format(sense.get('gloss')), \
                                              str_format(sense.get('examples')))
 
@@ -121,18 +127,21 @@ for i,token in enumerate(tokens):
     # if token is a pipe, we know we split the word.tag and the def num
     if token is '|':
         if '.' in tokens[i-1]:
-            prev_token = tokens.pop(i-1)
-            def_num = tokens.pop(i)
-            tag = prev_token[-1]
-            if not prev_token in target_defs.iterkeys():
-                (target, word_defs) = get_definitions(prev_token, def_num, tag)
-                target_defs[prev_token] = {}
-                target_defs[prev_token][def_num] = word_defs
-            elif not def_num in target_defs[prev_token].iterkeys():
-                (target, word_defs) = get_definitions(prev_token, def_num, tag)
-                target_defs[prev_token][def_num] = word_defs
-            # since I messed up the indices, it auto-skips the 2nd '|'
+            target = tokens.pop(i-1)
+            def_num = int(tokens.pop(i))
+            tag = target[-1]
+            if not target in target_defs.iterkeys():
+                target_defs[target] = defaultdict(list)
+                word_defs = get_definitions(target, def_num, tag)
+                for sense,word_def in word_defs:
+                    target_defs[target][sense].append(word_def)
+            
+            elif not def_num in target_defs[target].iterkeys():
+                word_defs = get_definitions(target, def_num, tag)
+                for sense,word in word_defs:
+                    target_defs[target][sense].append(word_def)
 
+            # since I messed up the indices, it auto-skips the 2nd '|'
     # token is keyword in sentence
     if '____' in token:
         context = []
@@ -143,11 +152,17 @@ for i,token in enumerate(tokens):
             if tokens[i-j] == '|':
                 beg_para = True 
             if not beg_para:
-                context.append(lmtzr.lemmatize(tokens[i-j]))
+                if lmtz_context is True:
+                    context.append(lmtzr.lemmatize(tokens[i-j]))
+                else:
+                    context.append(tokens[i-j])
             if tokens[i+j] in target_defs.iterkeys():
                 end_para = True
             if not end_para:
-                context.append(lmtzr.lemmatize(tokens[i+j]))
+                if lmtz_context is True:
+                    context.append(lmtzr.lemmatize(tokens[i+j]))
+                else:
+                    context.append(tokens[i+j]) 
         # Get definitions for context words with weak POS-tag
         for i,word in enumerate(context):
             tag = nltk.pos_tag(word)[0][1].lower()
