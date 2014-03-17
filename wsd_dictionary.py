@@ -144,7 +144,7 @@ with open('fake_data.data', 'r') as train:
 txt = re.sub("('')|(\.\.\.)", " ", txt)
 txt = re.sub("\. ", " ", txt)
 txt = re.sub("--", " ", txt)
-tokens = nltk.word_tokenize(re.sub('([\?\!\:,;`"\(\){}]+)', ' ', txt).lower())
+tokens = nltk.word_tokenize(re.sub('([\?\!\:,;`"\(\)\{\}\n]+)', ' ', txt).lower())
 
 # Make the list a set for constant access in the lst comp
 if rem_stop:
@@ -228,5 +228,6 @@ for i,token in enumerate(tokens):
             #for word in context:
                 # TODO compare definitions
 
-print target_defs['affect.v']
-#print context_defs
+            print target_defs
+            print ""
+print context_defs
