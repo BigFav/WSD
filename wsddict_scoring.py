@@ -1,11 +1,12 @@
 #import os
 from nltk.corpus import stopwords
+from collections import defaultdict
 
 SCALE = 2
 
 def select_score(contextDefs, senseDefs):
-    finalTally ={}
-    tieBreaker ={}
+    finalTally = defaultdict(int)
+    tieBreaker = defaultdict(int)
     finalSense = 0
     currentMaxScore = 0
     currentMaxSense = 0
@@ -28,7 +29,10 @@ def select_score(contextDefs, senseDefs):
         elif score == currentMaxScore:    
             if currentMaxSense ==0 or (sense in tieBreaker and tieBreaker[sense] > tieBreaker[currentMaxSense]):
                 currentMaxSense = sense
-    print currentMaxSense
+#    print currentMaxSense
+    with open('val_output.txt', 'a+') as out:
+        out.write("%d\n" % currentMaxSense)
+
     return currentMaxSense
 
 
@@ -71,7 +75,7 @@ def compare_defs(con1Def, sen1Def):
                 conFreq = context.count(sense)
                 senFreq = senDef.count(sense)
                 if sense in wordCountHash:
-                    wordCountHash[sense] = wordCountHash[sense]+(freq*senFreq)
+                    wordCountHash[sense] = wordCountHash[sense]+(conFreq*senFreq)
                 else:
                     wordCountHash[sense] = conFreq*senFreq
                 updatedContext = context.replace(sense, " ")
