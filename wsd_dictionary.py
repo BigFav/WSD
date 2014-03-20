@@ -7,11 +7,11 @@ from nltk.stem.wordnet import WordNetLemmatizer as Lemma
 from xml.etree import ElementTree as ET
 from collections import OrderedDict, defaultdict
 from operator import itemgetter
-
+import wsddict_scoring as score
 
 dictionary = {}
 lmtzr = Lemma()
-window_size = 2
+window_size = 1
 rem_stop = True
 use_sentences = False
 lmtz_context = True
@@ -137,7 +137,7 @@ for level in doc.findall('lexelt'):
                                              str_format(sense.get('examples')))
 
 # Turns "%% word %%" into "____word____" to hack the tokenizer into not splitting it up
-with open('fake_data.data', 'r') as train:
+with open('validation_data.data', 'r') as train:
     txt = re.sub(r"%%\s(.+)\s%%", r"____\1____", train.read())
 
 #tries to remove punctuation
@@ -164,6 +164,7 @@ for i,token in enumerate(tokens):
             target = tokens.pop(i-1)
             def_num = int(tokens.pop(i))
             tag = target[-1]
+            def_num = 0
 
             if not target in target_defs.iterkeys():
                 target_defs[target] = defaultdict(list)
@@ -227,7 +228,9 @@ for i,token in enumerate(tokens):
             context.extend(context2)
             #for word in context:
                 # TODO compare definitions
+            newContext = {}
+            for word in context:
+                if word in context_defs:
+                    newContext[word] = context_defs[word]
 
-            print target_defs
-            print ""
-print context_defs
+            score.select_score(newContext, target_defs[target], True)

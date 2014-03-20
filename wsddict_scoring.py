@@ -1,9 +1,9 @@
-#import os
+import math
 from nltk.corpus import stopwords
 
 SCALE = 2
 
-def select_score(contextDefs, senseDefs):
+def select_score(contextDefs, senseDefs, softscore):
     finalTally ={}
     tieBreaker ={}
     finalSense = 0
@@ -21,15 +21,36 @@ def select_score(contextDefs, senseDefs):
                     maxword = newScore[1]
                     tieBreaker[s_def] = maxword
         finalTally[s_def] = sum(scorePerSense)
+
+    totalScoreCount = sum(finalTally.values())
+    strSense = []
+    finalStr = ""
+    #print totalScoreCount
     for sense, score in finalTally.items():
-     #   print str(sense) + " : " + str(score)
-        if score > currentMaxScore:
-            currentMaxScore = score
-            currentMaxSense = sense
-        elif score == currentMaxScore:    
-            if currentMaxSense ==0 or (sense in tieBreaker and tieBreaker[sense] > tieBreaker[currentMaxSense]):
+       # print str(sense) + " : " + str(score)
+        if softscore:
+            if totalScoreCount == 0 :
+                strSense.append(str(float(score)))
+             
+            else:
+
+                updatedScore = float(score)/float(totalScoreCount)
+                strSense.append(str(updatedScore))        
+       
+        else:
+            if score > currentMaxScore:
+                currentMaxScore = score
                 currentMaxSense = sense
-    print currentMaxSense
+            elif score == currentMaxScore:    
+                if currentMaxSense ==0 or (sense in tieBreaker and tieBreaker[sense] > tieBreaker[currentMaxSense]):
+                    currentMaxSense = sense
+    with open('validationWin1ss.txt', 'a') as the_file:
+        if softscore:
+            for strScore in strSense:
+                finalStr = finalStr + strScore + " "
+            the_file.write(finalStr + "\n")
+        else:
+            the_file.write(str(currentMaxSense)+"\n")
     return currentMaxSense
 
 
@@ -37,16 +58,11 @@ def select_score(contextDefs, senseDefs):
 def scale_score(wordCountHash):
     maxword = 0
     scorelist = []
-    stop = stopwords.words('english')
-    #remove singular stopwords
     for word,count in wordCountHash.items():
         sword = word.split()
         length = len(sword)
-        if length == 1:
-            scorelist.append(count+1)
-        else:
-            value = (length * count) + length
-            scorelist.append(value)
+        value = (((math.pow(2, length)) * count) + (2*length))
+        scorelist.append(value)
         if length > maxword:
             maxword = length
     return [sum(scorelist), maxword]
@@ -73,17 +89,12 @@ def compare_defs(con1Def, sen1Def):
             stopworded = False
             i = 0
             terms = sense.split(" ")
-            if sense.strip() in stop:
-                ngramSize = ngramSize -1
-                continue
-
-            while i+1 < len(terms):
-                if (terms[i] in stop) and (terms[i+1] in stop):
+            while i < len(terms):
+                if terms[i] in stop:
                     stopworded = True
                     break
                 else:
                     i = i+1
-
             if stopworded:
                 ngramSize = ngramSize -1
                 continue
